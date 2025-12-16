@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3416 戰略終端 | 穩定修復 V20</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+        .mono { font-family: 'SF Mono', 'JetBrains Mono', monospace; }
+        .active-btn:active { transform: scale(0.96); transition: 0.1s; }
+        input, select { -webkit-appearance: none; border: none; outline: none; border-radius: 12px; }
+        .mode-active { border: 2px solid #0f172a !important; background: #0f172a !important; color: white !important; }
+        .chart-wrapper { position: relative; height: 140px; width: 100%; }
+        .sync-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-900 pb-12">
+
+    <div class="bg-slate-900 text-white p-6 rounded-b-[3rem] shadow-2xl mb-4">
+        <div class="flex justify-between items-center mb-2 text-[10px] font-bold opacity-40 tracking-widest uppercase">
+            <span>Terminal V20 | 數據永續修復</span>
+            <div class="flex items-center gap-2">
+                <span id="syncStatus" class="text-emerald-400 sync-pulse">● 載入中...</span>
+                <span id="lastSyncTime">--:--</span>
+            </div>
+        </div>
+        <div class="flex items-baseline gap-3 mb-6">
+            <h1 id="totalEquity" class="text-4xl font-black mono tracking-tighter">$1,000,000</h1>
+            <span id="totalRoi" class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs font-bold">+0.0%</span>
+        </div>
+        <div class="grid grid-cols-2 gap-6 border-t border-white/10 pt-5">
+            <div class="text-left">
+                <p class="text-[10px] opacity-40 uppercase font-bold mb-1 text-emerald-300">流動現金</p>
+                <p id="cashBal" class="text-xl font-bold mono text-emerald-400">$1,000,000</p>
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] opacity-40 uppercase font-bold mb-1 text-rose-300">預計月派息</p>
+                <p id="estMonthDiv" class="text-xl font-bold mono text-rose-400">$0</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mx-4 mb-4 grid grid-cols-1 gap-3">
+        <div id="aiAdvisor" class="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="flex h-2 w-2 rounded-full bg-indigo-500"></span>
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase">戰略評估</h3>
+                </div>
+                <div id="yieldValue" class="text-lg font-black mono text-indigo-600">--%</div>
+            </div>
+            <div class="flex justify-between items-end">
+                <div class="flex-1 pr-4">
+                    <p id="adviceSignal" class="text-lg font-bold text-slate-800 mb-1">等待數據...</p>
+                    <p id="adviceDesc" class="text-[10px] text-slate-400">系統將在每次更新後自動儲存您的記錄。</p>
+                </div>
+                <button onclick="syncMarket(true)" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg active-btn">強制更新 ↻</button>
+            </div>
+        </div>
+
+        <div class="bg-indigo-600 p-4 rounded-3xl text-white shadow-lg flex justify-between items-center">
+            <div>
+                <p class="text-[10px] font-bold opacity-60 uppercase">下次預計除淨日</p>
+                <p id="cdDays" class="text-xl font-black">第 15-18 號</p>
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] font-bold opacity-60 uppercase">距離本月收息</p>
+                <p id="countdown" class="text-xl font-black">約 -- 天</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="px-4 space-y-4">
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
+            <div class="flex items-center gap-6">
+                <div class="w-1/2 chart-wrapper"><canvas id="allocChart"></canvas></div>
+                <div class="w-1/2 space-y-2 text-[10px] font-bold">
+                    <div class="flex justify-between text-blue-500"><span>長線 (40%)</span><span id="v1_label" class="mono">0%</span></div>
+                    <div class="flex justify-between text-amber-500"><span>波幅 (30%)</span><span id="v2_label" class="mono">0%</span></div>
+                    <div class="flex justify-between text-rose-500"><span>撈底 (30%)</span><span id="v3_label" class="mono">0%</span></div>
+                    <div class="flex justify-between text-slate-400 border-t pt-1"><span>持股總值</span><span id="totalHoldingLabel" class="mono">$0</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-200 space-y-4">
+            <div class="grid grid-cols-2 gap-2">
+                <button id="buyModeBtn" onclick="switchMode('BUY')" class="mode-active py-4 rounded-2xl font-black text-xs">買入</button>
+                <button id="sellModeBtn" onclick="switchMode('SELL')" class="bg-slate-100 text-slate-400 py-4 rounded-2xl font-black text-xs">沽出</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div class="bg-slate-100 p-3 rounded-2xl">
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">同步市價 (HKD)</span>
+                    <input type="number" id="price" value="10.60" step="0.01" oninput="updateUI()" class="bg-transparent font-black mono text-lg w-full">
+                </div>
+                <div class="bg-emerald-50 p-3 rounded-2xl">
+                    <span class="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">最新月息 (HKD)</span>
+                    <input type="number" id="divSetting" value="0.141" step="0.001" oninput="updateUI()" class="bg-transparent font-black mono text-emerald-700 text-lg w-full">
+                </div>
+            </div>
+
+            <select id="bucket" onchange="updateUI()" class="w-full p-4 bg-slate-100 rounded-2xl font-bold text-sm text-slate-600">
+                <option value="longTerm">長線核心 (戰略份額 40%)</option>
+                <option value="swing">波幅短線 (戰略份額 30%)</option>
+                <option value="bottom">低位撈底 (戰略份額 30%)</option>
+            </select>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div class="bg-slate-100 rounded-2xl p-2 relative border-2 border-slate-200">
+                    <span class="text-[8px] font-bold text-slate-400 uppercase absolute top-2 left-2">交易股數</span>
+                    <input type="number" id="shares" value="1000" oninput="updateUI()" class="w-full pt-4 bg-transparent font-mono font-bold text-center">
+                    <button onclick="setMax()" class="absolute bottom-1 right-1 bg-slate-900 text-white text-[7px] px-2 py-0.5 rounded font-bold">MAX</button>
+                </div>
+                <div class="bg-slate-900 rounded-2xl p-2 flex flex-col justify-center items-center">
+                    <span class="text-[8px] font-bold text-white/30 uppercase absolute top-2 left-2">交易總額</span>
+                    <p id="estAmount" class="font-mono font-bold text-emerald-400 text-xs mt-1">$0</p>
+                </div>
+            </div>
+
+            <button onclick="execute()" id="execBtn" class="active-btn w-full bg-slate-900 text-white font-black py-5 rounded-3xl shadow-2xl uppercase text-sm tracking-widest">確認並記錄交易</button>
+            <button onclick="collectDiv()" class="active-btn w-full bg-emerald-500 text-white font-black py-4 rounded-3xl shadow-lg uppercase text-xs">💰 本月股息入賬</button>
+        </div>
+
+        <div class="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden mb-12">
+            <div class="px-8 py-5 bg-slate-50 border-b flex justify-between items-center text-[10px] font-black text-slate-400">
+                <span>HISTORY LOG</span>
+                <button onclick="resetData()" class="text-rose-400">重設數據 (回復 100 萬起始)</button>
+            </div>
+            <div id="logBody" class="divide-y divide-slate-50 text-[11px] max-h-60 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script>
+        // 核心設定
+        const STORAGE_KEY = '3416_final_v20'; // 確保唯一的儲存 Key
+        const RATIOS = { longTerm: 0.40, swing: 0.30, bottom: 0.30 };
+        const NAMES = { longTerm: '長線', swing: '波幅', bottom: '撈底' };
+        const INITIAL_PRICE = 10.60;
+        const INITIAL_DIV = 0.141;
+
+        let currentMode = 'BUY';
+        let allocChart = null;
+        
+        // 初始狀態：100 萬本金
+        const DEFAULT_STATE = {
+            cash: 1000000,
+            holding: { longTerm: 0, swing: 0, bottom: 0 },
+            used: { longTerm: 0, swing: 0, bottom: 0 },
+            logs: []
+        };
+        
+        // 讀取數據：嘗試從本地儲存中讀取，失敗則使用默認狀態
+        let state = {};
+        try {
+            state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || DEFAULT_STATE;
+        } catch (e) {
+            console.error("Failed to load state from localStorage:", e);
+            state = DEFAULT_STATE; // 讀取失敗時使用默認值
+        }
+
+        // --- 核心功能：大市同步 (修復 API 失敗處理) ---
+        async function syncMarket(isManual = false) {
+            const statusEl = document.getElementById('syncStatus');
+            const priceEl = document.getElementById('price');
+            
+            statusEl.innerText = isManual ? "● 嘗試手動同步..." : "● 自動同步中...";
+            statusEl.classList.add('sync-pulse');
+
+            try {
+                // 嘗試從 API 獲取股價
+                const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/3416.HK`);
+                if (!res.ok) throw new Error("API response not OK");
+
+                const data = await res.json();
+                const quote = data.chart.result[0].meta;
+                
+                // 更新 UI 股價
+                const newPrice = quote.regularMarketPrice.toFixed(2);
+                priceEl.value = newPrice;
+                document.getElementById('lastSyncTime').innerText = new Date().toLocaleTimeString().slice(0,5);
+                
+                statusEl.innerText = isManual ? "● 手動同步成功" : "● 已連結大市";
+                statusEl.classList.remove('sync-pulse', 'text-rose-400');
+                statusEl.classList.add('text-emerald-400');
+                
+            } catch (e) { 
+                // ⚠️ 同步失敗處理邏輯
+                statusEl.innerText = "● 同步失敗，請手動輸入";
+                statusEl.classList.remove('sync-pulse', 'text-emerald-400');
+                statusEl.classList.add('text-rose-400');
+                priceEl.value = priceEl.value || INITIAL_PRICE; // 如果同步失敗，保留當前值或使用初始值
+                console.warn("Market sync failed. Using last known price or default. Error:", e);
+            }
+            // 無論同步成功與否，都應更新 UI 和儲存數據
+            updateUI();
+        }
+
+        // --- UI 及數據更新 ---
+        function updateUI() {
+            // 確保每次更新時，數據都會被正確寫入 localStorage
+            try {
+                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.error("Failed to save state to localStorage:", e);
+                // 可以彈出提示，但在行動端可能影響體驗
+            }
+
+            const p = parseFloat(document.getElementById('price').value) || 0;
+            const div = parseFloat(document.getElementById('divSetting').value) || 0;
+            const totalHoldVal = (state.holding.longTerm + state.holding.swing + state.holding.bottom) * p;
+            const totalEq = state.cash + totalHoldVal;
+            const yieldVal = p > 0 ? (div * 12 / p * 100) : 0;
+            
+            // ... (AI 評估、看板數據、除淨日提醒邏輯不變) ...
+            const signal = document.getElementById('adviceSignal');
+            const desc = document.getElementById('adviceDesc');
+            document.getElementById('yieldValue').innerText = yieldVal.toFixed(1) + "%";
+
+            if (yieldVal >= 16) {
+                signal.innerText = "🚀 激進擴張 (建議用：撈底)"; signal.className = "text-lg font-bold text-rose-600 mb-1";
+                desc.innerText = "息率極具吸引力。建議動用撈底份額，這是在大市低位建立被動收入的黃金時機。";
+            } else if (yieldVal >= 14) {
+                signal.innerText = "📈 穩健增持 (建議用：長線)"; signal.className = "text-lg font-bold text-emerald-600 mb-1";
+                desc.innerText = "進入價值區間，建議優先補滿長線核心倉位，穩定獲取每月派息。";
+            } else {
+                signal.innerText = "⚠️ 波段防守 (建議用：波幅)"; signal.className = "text-lg font-bold text-amber-600 mb-1";
+                desc.innerText = "息率處於平均線之下，股價可能短期超買。波幅份額可考慮逢高減持。";
+            }
+
+            document.getElementById('totalEquity').innerText = "$" + Math.round(totalEq).toLocaleString();
+            document.getElementById('totalRoi').innerText = (((totalEq - 1000000) / 1000000) * 100).toFixed(1) + "%";
+            document.getElementById('cashBal').innerText = "$" + Math.round(state.cash).toLocaleString();
+            document.getElementById('estMonthDiv').innerText = "$" + Math.round((state.holding.longTerm + state.holding.swing + state.holding.bottom) * div).toLocaleString();
+            document.getElementById('totalHoldingLabel').innerText = "$" + Math.round(totalHoldVal).toLocaleString();
+
+            const today = new Date().getDate();
+            const daysLeft = today <= 15 ? 15 - today : 30 - today + 15;
+            document.getElementById('countdown').innerText = daysLeft + " 天";
+
+            if (allocChart) {
+                allocChart.data.datasets[0].data = [state.holding.longTerm*p, state.holding.swing*p, state.holding.bottom*p, state.cash];
+                allocChart.update('none');
+            }
+            
+            document.getElementById('v1_label').innerText = totalEq > 0 ? ((state.holding.longTerm*p/totalEq)*100).toFixed(0) + "%" : "0%";
+            document.getElementById('v2_label').innerText = totalEq > 0 ? ((state.holding.swing*p/totalEq)*100).toFixed(0) + "%" : "0%";
+            document.getElementById('v3_label').innerText = totalEq > 0 ? ((state.holding.bottom*p/totalEq)*100).toFixed(0) + "%" : "0%";
+
+            const s = parseInt(document.getElementById('shares').value) || 0;
+            document.getElementById('estAmount').innerText = "$" + Math.round(p * s).toLocaleString();
+
+            renderLogs();
+        }
+
+        // --- 交易、MAX、切換模式、派息領取、日誌函數 (保持不變) ---
+        function execute() {
+            const p = parseFloat(document.getElementById('price').value);
+            const s = parseInt(document.getElementById('shares').value);
+            const b = document.getElementById('bucket').value;
+            const amt = p * s;
+            if (s <= 0) return;
+
+            if (currentMode === 'BUY') {
+                if (state.cash < amt) return alert("現金不足");
+                state.cash -= amt; state.holding[b] += s; state.used[b] += amt;
+                log(`買入 ${s.toLocaleString()}股 (${NAMES[b]})`, -amt);
+            } else {
+                if (state.holding[b] < s) return alert("持倉不足");
+                const avgCost = state.used[b] / state.holding[b];
+                state.cash += amt; state.holding[b] -= s; state.used[b] = Math.max(0, state.used[b] - (avgCost * s));
+                log(`沽出 ${s.toLocaleString()}股 (${NAMES[b]})`, amt);
+            }
+            updateUI();
+        }
+
+        function setMax() {
+            const p = parseFloat(document.getElementById('price').value) || 0;
+            const b = document.getElementById('bucket').value;
+            const totalEq = state.cash + (state.holding.longTerm + state.holding.swing + state.holding.bottom) * p;
+            if (currentMode === 'BUY') {
+                const limit = totalEq * RATIOS[b];
+                const canSpend = Math.min(Math.max(0, limit - state.used[b]), state.cash);
+                document.getElementById('shares').value = Math.floor(canSpend / p);
+            } else {
+                document.getElementById('shares').value = state.holding[b];
+            }
+            updateUI();
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.getElementById('buyModeBtn').className = mode === 'BUY' ? "mode-active py-4 rounded-2xl font-black text-xs" : "bg-slate-100 text-slate-400 py-4 rounded-2xl font-black text-xs";
+            document.getElementById('sellModeBtn').className = mode === 'SELL' ? "mode-active py-4 rounded-2xl font-black text-xs !bg-rose-600 !border-rose-600" : "bg-slate-100 text-slate-400 py-4 rounded-2xl font-black text-xs";
+            updateUI();
+        }
+
+        function collectDiv() {
+            const div = parseFloat(document.getElementById('divSetting').value);
+            const totalS = state.holding.longTerm + state.holding.swing + state.holding.bottom;
+            if (totalS <= 0) return;
+            state.cash += (div * totalS);
+            log(`收息入賬 (@$${div})`, div * totalS);
+            updateUI();
+        }
+
+        function log(msg, amt) {
+            state.logs.unshift({ date: new Date().toLocaleDateString(), msg, amt });
+            if (state.logs.length > 30) state.logs.pop();
+        }
+
+        function renderLogs() {
+            document.getElementById('logBody').innerHTML = state.logs.map(l => `
+                <div class="p-4 flex justify-between items-center bg-white px-8 border-b border-slate-50">
+                    <div class="flex flex-col"><span class="font-bold text-[9px] uppercase">${l.msg}</span><span class="text-[7px] text-slate-400 mono">${l.date}</span></div>
+                    <span class="font-black mono text-[11px] ${l.amt>=0?'text-emerald-500':'text-slate-900'}">${l.amt>=0?'+':''}${Math.round(l.amt).toLocaleString()}</span>
+                </div>
+            `).join('');
+        }
+        
+        function resetData() { 
+            if(confirm("警告！確定重設所有數據？這將清除所有交易歷史，並回復到 100 萬起始本金。")) { 
+                localStorage.removeItem(STORAGE_KEY); 
+                location.reload(); 
+            } 
+        }
+
+        // --- 初始化 ---
+        window.onload = () => {
+            // 在圖表初始化之前，先嘗試用現有數據渲染 UI
+            document.getElementById('price').value = INITIAL_PRICE;
+            document.getElementById('divSetting').value = INITIAL_DIV;
+            updateUI();
+
+            const ctx = document.getElementById('allocChart').getContext('2d');
+            allocChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: ['長線','波幅','撈底','現金'], datasets: [{ data: [0,0,0,100], backgroundColor: ['#3b82f6','#f59e0b','#f43f5e','#f1f5f9'], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '80%', plugins: { legend: { display: false } } }
+            });
+
+            // 啟動同步
+            syncMarket();
+            // 每分鐘自動同步一次
+            setInterval(syncMarket, 60000); 
+        };
+    </script>
+</body>
+</html>
